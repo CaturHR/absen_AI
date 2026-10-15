@@ -82,4 +82,14 @@ class ApiConstants {
 
   // Health Endpoint
   static String get healthUrl => '$baseUrl/api/health';
+
+  // AI Microservice Endpoint
+  static String get aiServiceUrl {
+    try {
+      final uri = Uri.parse(baseUrl);
+      return '${uri.scheme}://${uri.host}:8000';
+    } catch (_) {
+      return 'http://127.0.0.1:8000';
+    }
+  }
 }

@@ -187,6 +187,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               : '-';
 
                           final status = item['status']?.toString() ?? 'Hadir';
+                          final isClockOut = status == 'Clock Out';
                           final distance = item['distance'];
                           final confidence = item['face_confidence'];
 
@@ -233,8 +234,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       '$timeStr WIB',
                                       style: const TextStyle(fontSize: 12, color: Colors.black54, fontFamily: 'monospace'),
                                     ),
-                                    const Spacer(),
-                                    if (distance != null) ...[
+                                    if (!isClockOut && distance != null) ...[
+                                      const Spacer(),
                                       const Icon(Icons.near_me_outlined, size: 14, color: Colors.black38),
                                       const SizedBox(width: 4),
                                       Flexible(
@@ -247,7 +248,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     ],
                                   ],
                                 ),
-                                if (confidence != null) ...[
+                                if (!isClockOut && confidence != null) ...[
                                   const SizedBox(height: 6),
                                   Text(
                                     'Kemiripan Wajah: ${(confidence as num).toStringAsFixed(1)}%',

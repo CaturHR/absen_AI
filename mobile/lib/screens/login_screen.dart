@@ -405,7 +405,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   )
                                 : const Text(
-                                    'Masuk ke Sistem',
+                                    'Login',
                                     style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.bold),

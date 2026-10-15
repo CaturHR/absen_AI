@@ -279,7 +279,7 @@ export default function ExportDataPage({ onBack, onLogout }) {
         'No': idx + 1,
         'Nama Karyawan': item.name || '-',
         'NIP': item.nip || '-',
-        'Email': item.email || '-',
+        'Email / Username': item.email || '-',
         'Divisi': item.divisi || item.department || '-',
         'Total Hari Kerja': item.totalWorkDays,
         'Jumlah Hadir': item.hadirCount,
@@ -293,7 +293,7 @@ export default function ExportDataPage({ onBack, onLogout }) {
         { wch: 6 },  // No
         { wch: 26 }, // Nama Karyawan
         { wch: 18 }, // NIP
-        { wch: 28 }, // Email
+        { wch: 28 }, // Email / Username
         { wch: 18 }, // Divisi
         { wch: 18 }, // Total Hari Kerja
         { wch: 15 }, // Jumlah Hadir
@@ -339,7 +339,7 @@ export default function ExportDataPage({ onBack, onLogout }) {
             'Jam': formattedTime,
             'Nama Karyawan': item.user_name || '-',
             'NIP': item.user_nip || '-',
-            'Email': item.user_email || '-',
+            'Email / Username': item.user_email || '-',
             'Lokasi Presensi': item.location_name || 'Kantor Pusat',
             'Status Kehadiran': item.status || '-',
             'Akurasi Wajah (%)':
@@ -363,7 +363,7 @@ export default function ExportDataPage({ onBack, onLogout }) {
           { wch: 12 }, // Jam
           { wch: 25 }, // Nama Karyawan
           { wch: 18 }, // NIP
-          { wch: 28 }, // Email
+          { wch: 28 }, // Email / Username
           { wch: 24 }, // Lokasi Presensi
           { wch: 18 }, // Status Kehadiran
           { wch: 18 }, // Akurasi Wajah

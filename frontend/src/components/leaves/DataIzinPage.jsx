@@ -328,6 +328,7 @@ export default function DataIzinPage({ onBack, onLogout }) {
                                 ...selectStyle,
                               }}
                             >
+                              <option value="pending" style={styles.optionPending}>Pilih tindakan</option>
                               <option value="approved" style={styles.optionApproved}>Setujui</option>
                               <option value="rejected" style={styles.optionRejected}>Ditolak</option>
                             </select>
@@ -407,21 +408,21 @@ export default function DataIzinPage({ onBack, onLogout }) {
                         selectedFileModal.status === 'approved'
                           ? '#dcfce7'
                           : selectedFileModal.status === 'rejected'
-                          ? '#fee2e2'
-                          : '#fef3c7',
+                            ? '#fee2e2'
+                            : '#fef3c7',
                       color:
                         selectedFileModal.status === 'approved'
                           ? '#15803d'
                           : selectedFileModal.status === 'rejected'
-                          ? '#b91c1c'
-                          : '#b45309',
+                            ? '#b91c1c'
+                            : '#b45309',
                     }}
                   >
                     {selectedFileModal.status === 'approved'
                       ? '✓ Disetujui'
                       : selectedFileModal.status === 'rejected'
-                      ? '✕ Ditolak'
-                      : '⏳ Menunggu Persetujuan'}
+                        ? '✕ Ditolak'
+                        : '⏳ Menunggu Persetujuan'}
                   </span>
                 </div>
               </div>

@@ -5,6 +5,7 @@ import 'config/api_constants.dart';
 import 'services/auth_service.dart';
 import 'widgets/liquid_glass.dart';
 import 'screens/login_screen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/attendance_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/profile_screen.dart';
@@ -33,15 +34,13 @@ Future<void> main() async {
     debugPrint('Tidak dapat mendeteksi kamera saat startup: $e');
   }
 
-  final bool loggedIn = await AuthService.isLoggedIn();
-
-  runApp(AbsensiApp(isLoggedIn: loggedIn));
+  runApp(AbsensiApp(cameras: cameras));
 }
 
 class AbsensiApp extends StatelessWidget {
-  final bool isLoggedIn;
+  final List<CameraDescription> cameras;
 
-  const AbsensiApp({super.key, required this.isLoggedIn});
+  const AbsensiApp({super.key, required this.cameras});
 
   @override
   Widget build(BuildContext context) {
@@ -56,9 +55,7 @@ class AbsensiApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFFF7F7F2),
         useMaterial3: true,
       ),
-      home: isLoggedIn
-          ? MainNavigationWrapper(cameras: cameras)
-          : LoginScreen(cameras: cameras),
+      home: SplashScreen(cameras: cameras),
     );
   }
 }
