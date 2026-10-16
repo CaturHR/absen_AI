@@ -47,6 +47,7 @@ class AuthService {
         await prefs.setString('user_nip', user['nip']?.toString() ?? identifier);
         await prefs.setString('user_email', user['email']?.toString() ?? '');
         await prefs.setString('user_role', user['role']?.toString() ?? 'user');
+        await prefs.setString('user_divisi', user['divisi']?.toString() ?? '');
         if (user['face_photo'] != null) {
           await prefs.setString('user_face_photo', user['face_photo'].toString());
         }
@@ -87,6 +88,7 @@ class AuthService {
       'nip': prefs.getString('user_nip') ?? '-',
       'email': prefs.getString('user_email') ?? '-',
       'role': prefs.getString('user_role') ?? 'user',
+      'divisi': prefs.getString('user_divisi') ?? '',
       'face_photo': prefs.getString('user_face_photo') ?? '',
     };
   }
@@ -114,6 +116,7 @@ class AuthService {
           await prefs.setString('user_nip', user['nip']?.toString() ?? '');
           await prefs.setString('user_email', user['email']?.toString() ?? '');
           await prefs.setString('user_role', user['role']?.toString() ?? 'user');
+          await prefs.setString('user_divisi', user['divisi']?.toString() ?? '');
           if (user['face_photo'] != null) {
             await prefs.setString('user_face_photo', user['face_photo'].toString());
           }

@@ -16,6 +16,7 @@ const userRoutes = require('./routes/userRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 // Import Models (for auto table creation)
 const LeaveRequest = require('./models/LeaveRequest');
@@ -122,6 +123,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/leaves', leaveRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // ──────────────────────────────────────────────
 // Health Check
@@ -166,7 +168,30 @@ const startServer = async () => {
       console.error('⚠️ Gagal membuat tabel leave_requests:', err.message);
     }
 
-    app.listen(PORT, '0.0.0.0', () => {
+    // Jalankan Auto Clock Out untuk presensi hari-hari sebelumnya yang belum di-clock out
+    const Attendance = require('./models/Attendance');
+    try {
+      const autoCount = await Attendance.autoClockOut();
+      if (autoCount > 0) {
+        console.log(`⏰ Auto Clock Out: ${autoCount} presensi sebelumnya berhasil ditutup otomatis.`);
+      }
+    } catch (err) {
+      console.error('⚠️ Gagal menjalankan auto clock out saat start:', err.message);
+    }
+
+    // Interval pemeriksaan Auto Clock Out berkala (setiap 30 menit)
+    setInterval(async () => {
+      try {
+        const autoCount = await Attendance.autoClockOut();
+        if (autoCount > 0) {
+          console.log(`⏰ Auto Clock Out [Interval]: ${autoCount} presensi berhasil ditutup otomatis.`);
+        }
+      } catch (err) {
+        console.error('⚠️ Error pada background auto clock out:', err.message);
+      }
+    }, 30 * 60 * 1000);
+
+    app.listen(PORT, () => {
       console.log('══════════════════════════════════════════');
       console.log(`🚀 Server berjalan di port ${PORT} (0.0.0.0)`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

@@ -36,18 +36,34 @@ class TodayAttendanceStatus {
   final bool hasClockedOut;
   final String? clockInTime;
   final String? clockOutTime;
+  final bool hasPendingReview;
+  final String? pendingTime;
+  final bool hasRejectedToday;
+  final bool hasLeaveToday;
+  final String? leaveReason;
+  final String? leaveStatus;
+  final Map<String, dynamic>? todayLeave;
 
   TodayAttendanceStatus({
     required this.hasClockedIn,
     required this.hasClockedOut,
     this.clockInTime,
     this.clockOutTime,
+    this.hasPendingReview = false,
+    this.pendingTime,
+    this.hasRejectedToday = false,
+    this.hasLeaveToday = false,
+    this.leaveReason,
+    this.leaveStatus,
+    this.todayLeave,
   });
 
   factory TodayAttendanceStatus.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>? ?? {};
     final clockIn = data['clockIn'] as Map<String, dynamic>?;
     final clockOut = data['clockOut'] as Map<String, dynamic>?;
+    final pending = data['pending'] as Map<String, dynamic>?;
+    final todayLeave = data['todayLeave'] as Map<String, dynamic>?;
 
     String? formatTime(Map<String, dynamic>? record) {
       if (record == null) return null;
@@ -71,6 +87,13 @@ class TodayAttendanceStatus {
       hasClockedOut: data['hasClockedOut'] == true,
       clockInTime: formatTime(clockIn),
       clockOutTime: formatTime(clockOut),
+      hasPendingReview: data['hasPendingReview'] == true || pending != null,
+      pendingTime: formatTime(pending),
+      hasRejectedToday: data['hasRejectedToday'] == true,
+      hasLeaveToday: data['hasLeaveToday'] == true,
+      leaveReason: todayLeave?['reason']?.toString(),
+      leaveStatus: todayLeave?['status']?.toString(),
+      todayLeave: todayLeave,
     );
   }
 }
@@ -124,9 +147,9 @@ class AttendanceService {
     return prefs.getString('auth_token');
   }
 
-  /// Mengambil data lokasi kantor/kampus aktif untuk geofencing
+  /// Mengambil data semua lokasi kantor/kampus aktif untuk geofencing multi-lokasi
   /// Endpoint: GET /api/locations/active
-  static Future<OfficeLocation?> getActiveOfficeLocation() async {
+  static Future<List<OfficeLocation>> getActiveOfficeLocations() async {
     try {
       final uri = Uri.parse(ApiConstants.activeLocationUrl);
       final token = await _getAuthToken();
@@ -142,11 +165,20 @@ class AttendanceService {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded['success'] == true && decoded['data'] != null) {
-          return OfficeLocation.fromJson(decoded['data']);
+          final dataList = decoded['data'] as List<dynamic>;
+          return dataList
+              .map((item) => OfficeLocation.fromJson(item as Map<String, dynamic>))
+              .toList();
         }
       }
     } catch (_) {}
-    return null;
+    return [];
+  }
+
+  /// Backward compatibility: mengambil lokasi aktif pertama
+  static Future<OfficeLocation?> getActiveOfficeLocation() async {
+    final locations = await getActiveOfficeLocations();
+    return locations.isNotEmpty ? locations.first : null;
   }
 
   /// Mengambil status Clock In & Clock Out pengguna untuk hari ini
@@ -173,6 +205,31 @@ class AttendanceService {
     } catch (e) {
       // ignore
     }
+    return null;
+  }
+
+  /// Mengambil data permohonan izin hari ini milik user
+  /// Endpoint: GET /api/leaves/today
+  static Future<Map<String, dynamic>?> getTodayLeave() async {
+    try {
+      final uri = Uri.parse(ApiConstants.todayLeaveUrl);
+      final token = await _getAuthToken();
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded['success'] == true && decoded['data'] != null) {
+          return decoded['data'] as Map<String, dynamic>;
+        }
+      }
+    } catch (_) {}
     return null;
   }
 

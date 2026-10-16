@@ -332,6 +332,15 @@ const attendanceController = {
       // ──────────────────────────────────────────────
       const todayStatus = await Attendance.getTodayStatus(userId);
 
+      // Jika user sudah melakukan izin hari ini, Clock In dan Clock Out tidak dapat dilakukan
+      if (todayStatus.hasLeaveToday) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Anda sudah mengajukan izin hari ini, sehingga tidak dapat melakukan Clock In maupun Clock Out.',
+        });
+      }
+
       if (type === 'in' && todayStatus.hasClockedIn) {
         if (req.file) fs.unlinkSync(req.file.path);
         const inTime = (todayStatus.clockIn.time || (todayStatus.clockIn.time || new Date(todayStatus.clockIn.created_at).toLocaleTimeString('id-ID', {
@@ -343,6 +352,22 @@ const attendanceController = {
         return res.status(400).json({
           success: false,
           message: `Anda sudah melakukan Clock In hari ini pada pukul ${inTime}.`,
+        });
+      }
+
+      if (type === 'in' && todayStatus.hasPendingReview) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Presensi Anda sebelumnya sedang menunggu review approval admin. Silakan tunggu konfirmasi dari admin.',
+        });
+      }
+
+      if (type === 'in' && todayStatus.hasRejectedToday) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Presensi Anda hari ini telah ditolak oleh admin (Wajah Tidak Cocok / Terhitung Alpha).',
         });
       }
 
@@ -412,12 +437,11 @@ const attendanceController = {
       }
 
       // ──────────────────────────────────────────────
-      // 5. Ambil lokasi kantor/kampus dari database
+      // 5. Ambil SEMUA lokasi aktif dari database
       // ──────────────────────────────────────────────
-      let location = await Location.getActive();
-      const allLocations = await Location.findAll();
+      const allLocations = await Location.getAllActive();
 
-      if (!location) {
+      if (!allLocations || allLocations.length === 0) {
         if (req.file) fs.unlinkSync(req.file.path);
         return res.status(404).json({
           success: false,
@@ -426,167 +450,128 @@ const attendanceController = {
       }
 
       // ──────────────────────────────────────────────
-      // 6. Hitung jarak menggunakan Haversine
+      // 6. Hitung jarak ke setiap lokasi dan cari yang terdekat dalam radius
       // ──────────────────────────────────────────────
-      const distance = haversine(lat, lng, location.latitude, location.longitude);
-      const radius = location.radius || parseInt(process.env.DEFAULT_RADIUS_METERS, 10) || 100;
+      let matchedLocation = null;
+      let shortestDistance = Infinity;
+
+      for (const loc of allLocations) {
+        const dist = haversine(lat, lng, loc.latitude, loc.longitude);
+        const locRadius = loc.radius || parseInt(process.env.DEFAULT_RADIUS_METERS, 10) || 100;
+
+        if (dist <= locRadius && dist < shortestDistance) {
+          matchedLocation = loc;
+          shortestDistance = dist;
+        }
+      }
 
       // ──────────────────────────────────────────────
-      // 7. Cek geofencing - Jika di luar radius
+      // 7. Cek geofencing - Jika tidak berada dalam radius lokasi manapun
       // ──────────────────────────────────────────────
-      if (distance > radius) {
-        // Simpan log dengan status "Di Luar Radius"
+      if (!matchedLocation) {
+        // Hitung jarak ke lokasi terdekat untuk ditampilkan di pesan error
+        let closestLoc = allLocations[0];
+        let closestDist = haversine(lat, lng, allLocations[0].latitude, allLocations[0].longitude);
+        for (let i = 1; i < allLocations.length; i++) {
+          const dist = haversine(lat, lng, allLocations[i].latitude, allLocations[i].longitude);
+          if (dist < closestDist) {
+            closestLoc = allLocations[i];
+            closestDist = dist;
+          }
+        }
+        const closestRadius = closestLoc.radius || parseInt(process.env.DEFAULT_RADIUS_METERS, 10) || 100;
+
         const photoRelativePath = req.file ? `attendance/${req.file.filename}` : null;
 
         const attendanceLog = await Attendance.create({
           user_id: userId,
           latitude: lat,
           longitude: lng,
-          distance,
+          distance: closestDist,
           face_confidence: null,
           status: 'Di Luar Radius',
           photo: photoRelativePath,
-          location_id: location.id,
+          location_id: closestLoc.id,
         });
 
         return res.status(200).json({
           success: false,
-          message: `Anda berada di luar radius. Jarak Anda: ${distance} meter, radius maksimum: ${radius} meter.`,
+          message: `Anda berada di luar radius semua lokasi terdaftar. Lokasi terdekat: "${closestLoc.name}" (jarak: ${closestDist} meter, radius: ${closestRadius} meter).`,
           data: {
             id: attendanceLog.id,
             status: 'Di Luar Radius',
-            distance,
-            radius,
+            distance: closestDist,
+            radius: closestRadius,
+            closestLocation: closestLoc.name,
             timestamp: new Date().toISOString(),
           },
         });
       }
 
+      // Gunakan lokasi yang cocok (terdekat dalam radius)
+      const location = matchedLocation;
+      const distance = shortestDistance;
+      const radius = location.radius || parseInt(process.env.DEFAULT_RADIUS_METERS, 10) || 100;
+
       // ──────────────────────────────────────────────
-      // 6. Face Recognition via AI Microservice (Clock In only)
+      // 8. Face Recognition
+      // Clock In: komparasi wajah aktif. Jika tidak cocok (not match) -> status 'pending'
+      // Clock Out: tidak membutuhkan foto/wajah, langsung simpan.
       // ──────────────────────────────────────────────
       let faceConfidence = null;
-      let faceStatus = type === 'out' ? 'Clock Out' : 'Clock In';
+      let faceStatus = type === 'in' ? 'Clock In' : 'Clock Out';
+      let isFaceMatch = true;
 
       if (type === 'in') {
-        // Ambil foto master
-        const facePhoto = await User.getFacePhoto(userId);
+        const facePhotoRelative = await User.getFacePhoto(userId);
 
-        if (!facePhoto) {
-          if (req.file) fs.unlinkSync(req.file.path);
-          return res.status(400).json({
-            success: false,
-            message: 'Foto master wajah belum terdaftar. Hubungi admin.',
-          });
-        }
+        if (!facePhotoRelative) {
+          faceConfidence = 0;
+          faceStatus = 'pending';
+          isFaceMatch = false;
+        } else {
+          const masterFacePath = path.join(UPLOAD_DIR_FACES, path.basename(facePhotoRelative));
+          const attendanceFacePath = req.file.path;
 
-        // Strip prefix 'uploads/' jika sudah ada di database untuk mencegah double path
-        const cleanFacePhoto = facePhoto.replace(/^uploads[\/\\]/, '');
-        const masterPhotoPath = path.join(__dirname, '..', 'uploads', cleanFacePhoto);
+          if (!fs.existsSync(masterFacePath)) {
+            faceConfidence = 0;
+            faceStatus = 'pending';
+            isFaceMatch = false;
+          } else {
+            try {
+              // Cek parameter manual/mock override untuk testing
+              if (
+                req.body.is_match === 'false' ||
+                req.body.not_match === 'true' ||
+                req.body.force_not_match === 'true' ||
+                req.query.not_match === 'true'
+              ) {
+                faceConfidence = 38.5;
+                faceStatus = 'pending';
+                isFaceMatch = false;
+              } else {
+                const faceResult = await compareFaces(masterFacePath, attendanceFacePath);
+                faceConfidence = faceResult.confidence;
+                const confidenceThreshold = faceResult.thresholds
+                  ? (faceResult.thresholds['1e-3'] || 60)
+                  : 60;
 
-        if (!fs.existsSync(masterPhotoPath)) {
-          if (req.file) fs.unlinkSync(req.file.path);
-          return res.status(400).json({
-            success: false,
-            message: 'File foto master wajah tidak ditemukan di server. Hubungi admin.',
-          });
-        }
-
-        try {
-          const formData = new FormData();
-          formData.append('captured_image', fs.createReadStream(req.file.path));
-          formData.append('master_image', fs.createReadStream(masterPhotoPath));
-
-          const aiResponse = await axios.post(`${AI_SERVICE_URL}/compare`, formData, {
-            headers: { ...formData.getHeaders() },
-            timeout: 60000,
-            validateStatus: (status) => status < 500,
-          });
-
-          const aiResult = aiResponse.data;
-
-          if (!aiResult.success) {
-            // Wajah tidak terdeteksi
-            const photoRelativePath = `attendance/${req.file.filename}`;
-            const attendanceLog = await Attendance.create({
-              user_id: userId,
-              latitude: lat,
-              longitude: lng,
-              distance,
-              face_confidence: null,
-              status: 'Gagal Verifikasi Wajah',
-              photo: photoRelativePath,
-              location_id: location.id,
-            });
-
-            return res.status(400).json({
-              success: false,
-              message: aiResult.error || 'Gagal mendeteksi wajah pada foto. Pastikan wajah terlihat jelas.',
-              data: {
-                id: attendanceLog.id,
-                status: 'Gagal Verifikasi Wajah',
-                timestamp: new Date().toISOString(),
-              },
-            });
+                if (faceConfidence >= confidenceThreshold) {
+                  faceStatus = 'Clock In';
+                  isFaceMatch = true;
+                } else {
+                  // Not match: Wajah tidak cocok -> status 'pending'
+                  faceStatus = 'pending';
+                  isFaceMatch = false;
+                }
+              }
+            } catch (faceErr) {
+              console.error('Face comparison error (status diset ke pending):', faceErr.message);
+              faceConfidence = 0;
+              faceStatus = 'pending';
+              isFaceMatch = false;
+            }
           }
-
-          // ──────────────────────────────────────────────
-          // Cek verifikasi wajah dari AI Service
-          // ──────────────────────────────────────────────
-          if (!aiResult.verified) {
-            // Wajah tidak cocok
-            const photoRelativePath = `attendance/${req.file.filename}`;
-            const attendanceLog = await Attendance.create({
-              user_id: userId,
-              latitude: lat,
-              longitude: lng,
-              distance,
-              face_confidence: aiResult.confidence,
-              status: 'Wajah Tidak Cocok',
-              photo: photoRelativePath,
-              location_id: location.id,
-            });
-
-            return res.status(400).json({
-              success: false,
-              message: `Wajah tidak cocok dengan foto profil pendaftaran (Kecocokan: ${aiResult.confidence}%). Presensi ditolak.`,
-              data: {
-                id: attendanceLog.id,
-                status: 'Wajah Tidak Cocok',
-                face_confidence: aiResult.confidence,
-                distance,
-                timestamp: new Date().toISOString(),
-              },
-            });
-          }
-
-          // Verifikasi berhasil
-          faceConfidence = aiResult.confidence;
-          faceStatus = 'Clock In';
-        } catch (aiError) {
-          console.error('❌ Gagal menghubungi AI Service:', aiError.message);
-
-          const photoRelativePath = `attendance/${req.file.filename}`;
-          const attendanceLog = await Attendance.create({
-            user_id: userId,
-            latitude: lat,
-            longitude: lng,
-            distance,
-            face_confidence: null,
-            status: 'Gagal Verifikasi Wajah',
-            photo: photoRelativePath,
-            location_id: location.id,
-          });
-
-          return res.status(500).json({
-            success: false,
-            message: 'Gagal menghubungi layanan verifikasi wajah. Silakan coba lagi.',
-            data: {
-              id: attendanceLog.id,
-              status: 'Gagal Verifikasi Wajah',
-              timestamp: new Date().toISOString(),
-            },
-          });
         }
       }
 
@@ -619,11 +604,19 @@ const attendanceController = {
         timeZone: 'Asia/Jakarta',
       }).replace('.', ':');
 
+      let message = '';
+      if (faceStatus === 'pending') {
+        message = `Wajah tidak cocok (Akurasi: ${faceConfidence ? faceConfidence + '%' : 'Not Match'}). Presensi Anda berstatus pending dan sedang menunggu review approval dari admin.`;
+      } else if (isSuccess) {
+        message = `${actionLabel} berhasil pada pukul ${timeStr}.`;
+      } else {
+        message = `${actionLabel} gagal.`;
+      }
+
       return res.status(statusCode).json({
         success: isSuccess,
-        message: isSuccess
-          ? `${actionLabel} berhasil pada pukul ${timeStr}.`
-          : `${actionLabel} gagal. Wajah tidak cocok (confidence: ${faceConfidence}%).`,
+        status: faceStatus,
+        message,
         data: {
           id: attendanceLog.id,
           status: faceStatus,

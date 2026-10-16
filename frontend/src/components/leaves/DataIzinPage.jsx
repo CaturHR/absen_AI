@@ -28,6 +28,20 @@ export default function DataIzinPage({ onBack, onLogout }) {
 
   useEffect(() => {
     loadLeaves();
+
+    const handleRealtimeLeave = (e) => {
+      const data = e.detail;
+      console.log('[DataIzinPage] Permohonan izin real-time diterima, memperbarui data...', data);
+      loadLeaves();
+      if (data?.userName) {
+        showNotif('info', `Permohonan izin baru dari ${data.userName}: ${data.reason || ''}`);
+      }
+    };
+
+    window.addEventListener('app:leave-request', handleRealtimeLeave);
+    return () => {
+      window.removeEventListener('app:leave-request', handleRealtimeLeave);
+    };
   }, []);
 
   const showNotif = (type, message) => {
@@ -193,7 +207,7 @@ export default function DataIzinPage({ onBack, onLogout }) {
             </div>
             <div>
               <h2 style={styles.pageTitle}>Data Izin Karyawan</h2>
-              <p style={styles.pageSubtitle}>Daftar pengajuan izin dan peninjauan berkas lampiran resmi</p>
+              <p style={styles.pageSubtitle}>Daftar pengajuan izin dan peninjauan berkas lampiran</p>
             </div>
           </div>
         </div>
@@ -208,7 +222,6 @@ export default function DataIzinPage({ onBack, onLogout }) {
                   <th style={{ ...styles.th, minWidth: 170 }}>NAMA</th>
                   <th style={{ ...styles.th, minWidth: 240 }}>ALASAN & KETERANGAN</th>
                   <th style={{ ...styles.th, minWidth: 150, textAlign: 'center' }}>SURAT / LAMPIRAN</th>
-                  <th style={{ ...styles.th, minWidth: 150 }}>CLOCK IN / CLOCK OUT</th>
                   <th style={{ ...styles.th, minWidth: 150 }}>APPROVAL</th>
                 </tr>
               </thead>
@@ -304,18 +317,6 @@ export default function DataIzinPage({ onBack, onLogout }) {
                           </button>
                         </td>
 
-                        {/* CLOCK IN / CLOCK OUT */}
-                        <td style={styles.td}>
-                          <div style={styles.clockContainer}>
-                            <div style={{ color: clockIn ? '#475569' : '#94a3b8' }}>
-                              In {clockIn || '-'}
-                            </div>
-                            <div style={{ color: clockOut ? '#475569' : '#94a3b8' }}>
-                              Out {clockOut || '-'}
-                            </div>
-                          </div>
-                        </td>
-
                         {/* APPROVAL */}
                         <td style={styles.td}>
                           <div style={styles.selectWrapper}>
@@ -407,21 +408,21 @@ export default function DataIzinPage({ onBack, onLogout }) {
                         selectedFileModal.status === 'approved'
                           ? '#dcfce7'
                           : selectedFileModal.status === 'rejected'
-                          ? '#fee2e2'
-                          : '#fef3c7',
+                            ? '#fee2e2'
+                            : '#fef3c7',
                       color:
                         selectedFileModal.status === 'approved'
                           ? '#15803d'
                           : selectedFileModal.status === 'rejected'
-                          ? '#b91c1c'
-                          : '#b45309',
+                            ? '#b91c1c'
+                            : '#b45309',
                     }}
                   >
                     {selectedFileModal.status === 'approved'
                       ? '✓ Disetujui'
                       : selectedFileModal.status === 'rejected'
-                      ? '✕ Ditolak'
-                      : '⏳ Menunggu Persetujuan'}
+                        ? '✕ Ditolak'
+                        : '⏳ Menunggu Persetujuan'}
                   </span>
                 </div>
               </div>

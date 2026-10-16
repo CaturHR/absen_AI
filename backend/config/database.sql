@@ -36,11 +36,10 @@ CREATE TABLE `attendance_logs` (
   `longitude` double NOT NULL COMMENT 'Longitude lokasi user saat absensi',
   `distance` double DEFAULT NULL COMMENT 'Jarak ke lokasi kantor (meter)',
   `face_confidence` double DEFAULT NULL COMMENT 'Confidence score face comparison (0-100)',
-  `status` enum('Clock In','Clock Out','Di Luar Radius','Wajah Tidak Cocok','Gagal Verifikasi Wajah','Izin') COLLATE utf8mb4_unicode_ci NOT NULL,
-  `photo` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Path relatif ke foto absensi',
-  `notes` text COLLATE utf8mb4_unicode_ci COMMENT 'Catatan admin untuk verifikasi atau alasan absensi',
-  `location_id` int DEFAULT NULL COMMENT 'Lokasi kantor/kampus yang digunakan saat absensi',
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `status` enum('Clock In','Clock Out','Di Luar Radius','Wajah Tidak Cocok','Gagal Verifikasi Wajah','Izin','pending') NOT NULL,
+  `photo` varchar(255) DEFAULT NULL COMMENT 'Path relatif ke foto absensi',
+  `location_id` int(11) DEFAULT NULL COMMENT 'Lokasi kantor/kampus yang digunakan saat absensi',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
