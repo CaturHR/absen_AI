@@ -153,6 +153,21 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
     }
   };
 
+<<<<<<< main
+=======
+  const isApproved = (status) =>
+    status === 'Hadir' ||
+    status === 'match' ||
+    status === 'Clock In' ||
+    status === 'Clock Out';
+
+  const isRejected = (status) =>
+    status === 'Wajah Tidak Cocok' ||
+    status === 'mismatch' ||
+    status === 'Gagal Verifikasi Wajah' ||
+    status === 'Ditolak';
+
+>>>>>>> main
   const getSelectStyle = (status) => {
     if (isApproved(status)) {
       return {
@@ -759,9 +774,9 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
                 <div style={styles.photoCard}>
                   <div style={styles.photoBadgeAbsen}>Foto Saat Absen (Selfie)</div>
                   <div style={styles.photoContainer}>
-                    {selectedPhotoModal.attendance_photo ? (
+                    {(selectedPhotoModal.attendance_photo || selectedPhotoModal.photo) ? (
                       <img
-                        src={getImageUrl(selectedPhotoModal.attendance_photo)}
+                        src={getImageUrl(selectedPhotoModal.attendance_photo || selectedPhotoModal.photo)}
                         alt="Foto Absen"
                         style={styles.compareImg}
                         onError={(e) => {
@@ -771,7 +786,7 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
                       />
                     ) : null}
                     <div style={{
-                      display: selectedPhotoModal.attendance_photo ? 'none' : 'flex',
+                      display: (selectedPhotoModal.attendance_photo || selectedPhotoModal.photo) ? 'none' : 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -791,7 +806,7 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
                     </div>
                   </div>
                   <div style={styles.photoCaption}>
-                    Diambil: {selectedPhotoModal.created_at ? new Date(selectedPhotoModal.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace('.', ':') : '-'} ({selectedPhotoModal.type === 'out' ? 'Clock Out' : 'Clock In'})
+                    Diambil: {selectedPhotoModal.created_at ? new Date(selectedPhotoModal.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' }).replace('.', ':') : '-'} ({selectedPhotoModal.status === 'Clock Out' ? 'Clock Out' : 'Clock In'})
                   </div>
                   <div style={styles.photoDateCaption}>
                     pada tanggal {selectedPhotoModal.created_at ? new Date(selectedPhotoModal.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }) : '-'}
@@ -811,6 +826,11 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
                         ? 'Ditolak (Wajah Tidak Cocok)'
                         : 'Menunggu Review'}
                     </h4>
+                    {selectedPhotoModal.face_confidence !== null && selectedPhotoModal.face_confidence !== undefined && (
+                      <span style={{ fontSize: 12, color: '#64748b', display: 'block', marginTop: 3 }}>
+                        Skor Kecocokan AI: <strong style={{ color: selectedPhotoModal.face_confidence >= 70 ? '#16a34a' : '#dc2626' }}>{selectedPhotoModal.face_confidence}%</strong>
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{

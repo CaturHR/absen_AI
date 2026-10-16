@@ -37,7 +37,7 @@ const Location = {
    */
   findAll: async () => {
     const [rows] = await pool.execute(
-      'SELECT * FROM locations ORDER BY created_at DESC'
+      'SELECT * FROM locations ORDER BY is_active DESC, created_at DESC'
     );
     return rows;
   },
@@ -61,9 +61,9 @@ const Location = {
     // Semua lokasi baru langsung aktif, tidak menonaktifkan lokasi lain
     const [result] = await pool.execute(
       'INSERT INTO locations (name, latitude, longitude, radius, is_active) VALUES (?, ?, ?, ?, ?)',
-      [name, latitude, longitude, radius, is_active]
+      [name, latitude, longitude, radius, shouldBeActive ? 1 : 0]
     );
-    return { id: result.insertId, name, latitude, longitude, radius, is_active };
+    return { id: result.insertId, name, latitude, longitude, radius, is_active: shouldBeActive ? 1 : 0 };
   },
 
   /**
@@ -77,8 +77,25 @@ const Location = {
     const [result] = await pool.execute(
       `UPDATE locations SET name = ?, latitude = ?, longitude = ?, radius = ?, is_active = ?, updated_at = NOW()
        WHERE id = ?`,
-      [name, latitude, longitude, radius, is_active, id]
+      [name, latitude, longitude, radius, is_active ? 1 : 0, id]
     );
+
+    // Pastikan tetap ada minimal 1 lokasi aktif jika ada data
+    const [active] = await pool.execute('SELECT id FROM locations WHERE is_active = 1 LIMIT 1');
+    if (!active[0]) {
+      await pool.execute('UPDATE locations SET is_active = 1 WHERE id = ?', [id]);
+    }
+
+    return result;
+  },
+
+  /**
+   * Aktifkan lokasi tertentu
+   * @param {number} id
+   */
+  setActive: async (id) => {
+    await pool.execute('UPDATE locations SET is_active = 0');
+    const [result] = await pool.execute('UPDATE locations SET is_active = 1 WHERE id = ?', [id]);
     return result;
   },
 
@@ -89,6 +106,16 @@ const Location = {
    */
   delete: async (id) => {
     const [result] = await pool.execute('DELETE FROM locations WHERE id = ?', [id]);
+
+    // Jika lokasi aktif terhapus, aktifkan lokasi lain yang masih ada
+    const [active] = await pool.execute('SELECT id FROM locations WHERE is_active = 1 LIMIT 1');
+    if (!active[0]) {
+      const [remaining] = await pool.execute('SELECT id FROM locations ORDER BY id ASC LIMIT 1');
+      if (remaining[0]) {
+        await pool.execute('UPDATE locations SET is_active = 1 WHERE id = ?', [remaining[0].id]);
+      }
+    }
+
     return result;
   },
 };

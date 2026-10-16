@@ -193,9 +193,10 @@ const startServer = async () => {
 
     app.listen(PORT, () => {
       console.log('══════════════════════════════════════════');
-      console.log(`🚀 Server berjalan di port ${PORT}`);
+      console.log(`🚀 Server berjalan di port ${PORT} (0.0.0.0)`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`📡 API URL: http://localhost:${PORT}/api`);
+      console.log(`📱 Akses dari HP (WiFi): http://192.168.0.233:${PORT}/api`);
       console.log(`💾 Health Check: http://localhost:${PORT}/api/health`);
       console.log('══════════════════════════════════════════');
     });

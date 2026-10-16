@@ -56,7 +56,7 @@ const userController = {
       const hashedPassword = await bcrypt.hash(password, salt);
 
       // Path foto master wajah
-      const facePhoto = req.file ? `uploads/faces/${req.file.filename}` : null;
+      const facePhoto = req.file ? `faces/${req.file.filename}` : null;
 
       const newUser = await User.create({
         name: name.trim(),
@@ -238,7 +238,7 @@ const userController = {
         }
       }
 
-      const facePhotoRelative = `uploads/faces/${req.file.filename}`;
+      const facePhotoRelative = `faces/${req.file.filename}`;
       await User.update(id, { face_photo: facePhotoRelative });
 
       return res.status(200).json({

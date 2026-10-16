@@ -164,6 +164,24 @@ const Attendance = {
   },
 
   /**
+   * Update status absensi dan catatan (admin only).
+   * @param {number} id
+   * @param {object} param1 - { status, notes }
+   * @returns {Promise<object>}
+   */
+  updateStatus: async (id, { status, notes }) => {
+    let dbStatus = status;
+    if (status === 'match') dbStatus = 'Clock In';
+    if (status === 'mismatch') dbStatus = 'Wajah Tidak Cocok';
+
+    const [result] = await pool.execute(
+      'UPDATE attendance_logs SET status = ?, notes = COALESCE(?, notes) WHERE id = ?',
+      [dbStatus, notes || null, id]
+    );
+    return result;
+  },
+
+  /**
    * Cek apakah user sudah absen hari ini.
    * Rentang waktu harian: 00:00:00 s/d 23:59:59 WIB.
    * Reset terjadi otomatis tepat saat pergantian hari setelah pukul 23:59.

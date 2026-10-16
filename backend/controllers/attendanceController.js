@@ -1,19 +1,304 @@
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
+const FormData = require('form-data');
 const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const Location = require('../models/Location');
 const haversine = require('../utils/haversine');
-const { compareFaces } = require('../utils/faceRecognition');
-const { UPLOAD_DIR_FACES } = require('../config/multer');
+
+// URL Microservice AI Face Recognition (self-hosted)
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
 
 /**
  * AttendanceController - Menangani seluruh logika absensi.
  */
 const attendanceController = {
+  // ════════════════════════════════════════════════════════════════
+  // POST /api/attendance/clock-in
+  // Proses Clock In: geofencing → face recognition via AI → simpan log
+  //
+  // Flow:
+  //   1. Ambil user_id, latitude, longitude, location_id dari body & file foto dari Multer
+  //   2. Ambil data lokasi dari tabel locations berdasarkan location_id
+  //   3. Hitung jarak Haversine → jika > radius → INSERT "Di Luar Radius"
+  //   4. Ambil face_photo master dari tabel users
+  //   5. Kirim captured_image + master_image ke AI service /compare
+  //   6. Jika AI gagal deteksi wajah → INSERT "Gagal Verifikasi Wajah"
+  //   7. Jika verified = false → INSERT "Wajah Tidak Cocok"
+  //   8. Jika lolos → INSERT "Clock In" dengan distance, confidence, dsb.
+  // ════════════════════════════════════════════════════════════════
+  clockIn: async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+
+      // ──────────────────────────────────────────────
+      // 1. Ambil data dari request
+      // ──────────────────────────────────────────────
+      const { latitude, longitude, location_id } = req.body;
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'Foto wajah wajib diunggah saat Clock In.',
+        });
+      }
+
+      if (!latitude || !longitude) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Latitude dan longitude wajib disertakan.',
+        });
+      }
+
+      if (!location_id) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Location ID wajib disertakan.',
+        });
+      }
+
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const locId = parseInt(location_id, 10);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Latitude dan longitude harus berupa angka yang valid.',
+        });
+      }
+
+      const photoRelativePath = `attendance/${req.file.filename}`;
+
+      // ──────────────────────────────────────────────
+      // 2. Ambil data lokasi dari tabel locations
+      // ──────────────────────────────────────────────
+      const location = await Location.findById(locId);
+
+      if (!location) {
+        fs.unlinkSync(req.file.path);
+        return res.status(404).json({
+          success: false,
+          message: 'Lokasi tidak ditemukan. Hubungi admin.',
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 3. Hitung jarak Haversine
+      // ──────────────────────────────────────────────
+      const distance = haversine(lat, lng, location.latitude, location.longitude);
+      const radius = location.radius || parseInt(process.env.DEFAULT_RADIUS_METERS, 10) || 100;
+
+      // ──────────────────────────────────────────────
+      // 3a. Jika di luar radius → simpan log & return error
+      // ──────────────────────────────────────────────
+      if (distance > radius) {
+        const attendanceLog = await Attendance.create({
+          user_id: userId,
+          latitude: lat,
+          longitude: lng,
+          distance,
+          face_confidence: null,
+          status: 'Di Luar Radius',
+          photo: photoRelativePath,
+          location_id: locId,
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: `Anda berada di luar radius. Jarak Anda: ${distance} meter, radius maksimum: ${radius} meter.`,
+          data: {
+            id: attendanceLog.id,
+            status: 'Di Luar Radius',
+            distance,
+            radius,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 4. Ambil foto master wajah dari tabel users
+      // ──────────────────────────────────────────────
+      const facePhoto = await User.getFacePhoto(userId);
+
+      if (!facePhoto) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'Foto master wajah belum terdaftar. Hubungi admin untuk mendaftarkan foto wajah Anda.',
+        });
+      }
+
+      // Path absolut ke foto master (disimpan di uploads/<face_photo>)
+      // Strip prefix 'uploads/' jika sudah ada di database untuk mencegah double path
+      const cleanFacePhoto = facePhoto.replace(/^uploads[\/\\]/, '');
+      const masterPhotoPath = path.join(__dirname, '..', 'uploads', cleanFacePhoto);
+
+      if (!fs.existsSync(masterPhotoPath)) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'File foto master wajah tidak ditemukan di server. Hubungi admin.',
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 5. Kirim ke Microservice AI untuk verifikasi wajah
+      // ──────────────────────────────────────────────
+      let aiResult;
+
+      try {
+        const formData = new FormData();
+        formData.append('captured_image', fs.createReadStream(req.file.path));
+        formData.append('master_image', fs.createReadStream(masterPhotoPath));
+
+        const aiResponse = await axios.post(`${AI_SERVICE_URL}/compare`, formData, {
+          headers: {
+            ...formData.getHeaders(),
+          },
+          timeout: 60000, // 60 detik timeout (model inference bisa lambat)
+          // Terima semua status code agar kita bisa handle response 400 dari AI
+          validateStatus: (status) => status < 500,
+        });
+
+        aiResult = aiResponse.data;
+      } catch (aiError) {
+        // ──────────────────────────────────────────────
+        // 6. Jika AI service tidak bisa dihubungi / error
+        // ──────────────────────────────────────────────
+        console.error('❌ Gagal menghubungi AI Service:', aiError.message);
+
+        const attendanceLog = await Attendance.create({
+          user_id: userId,
+          latitude: lat,
+          longitude: lng,
+          distance,
+          face_confidence: null,
+          status: 'Gagal Verifikasi Wajah',
+          photo: photoRelativePath,
+          location_id: locId,
+        });
+
+        return res.status(500).json({
+          success: false,
+          message: 'Gagal menghubungi layanan verifikasi wajah. Silakan coba lagi.',
+          data: {
+            id: attendanceLog.id,
+            status: 'Gagal Verifikasi Wajah',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 6. Jika AI gagal mendeteksi wajah pada foto
+      // ──────────────────────────────────────────────
+      if (!aiResult.success) {
+        const attendanceLog = await Attendance.create({
+          user_id: userId,
+          latitude: lat,
+          longitude: lng,
+          distance,
+          face_confidence: null,
+          status: 'Gagal Verifikasi Wajah',
+          photo: photoRelativePath,
+          location_id: locId,
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: aiResult.error || 'Gagal memverifikasi wajah. Pastikan foto menampilkan wajah dengan jelas.',
+          data: {
+            id: attendanceLog.id,
+            status: 'Gagal Verifikasi Wajah',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 7. Jika wajah tidak cocok (berdasarkan keputusan AI Service)
+      // ──────────────────────────────────────────────
+      if (!aiResult.verified) {
+        const attendanceLog = await Attendance.create({
+          user_id: userId,
+          latitude: lat,
+          longitude: lng,
+          distance,
+          face_confidence: aiResult.confidence,
+          status: 'Wajah Tidak Cocok',
+          photo: photoRelativePath,
+          location_id: locId,
+        });
+
+        return res.status(400).json({
+          success: false,
+          message: `Wajah tidak cocok. Confidence: ${aiResult.confidence}%.`,
+          data: {
+            id: attendanceLog.id,
+            status: 'Wajah Tidak Cocok',
+            face_confidence: aiResult.confidence,
+            distance,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+
+      // ──────────────────────────────────────────────
+      // 8. Lolos verifikasi → simpan sebagai Clock In
+      // ──────────────────────────────────────────────
+      const attendanceLog = await Attendance.create({
+        user_id: userId,
+        latitude: lat,
+        longitude: lng,
+        distance,
+        face_confidence: aiResult.confidence,
+        status: 'Clock In',
+        photo: photoRelativePath,
+        location_id: locId,
+      });
+
+      const now = new Date();
+      const timeStr = now
+        .toLocaleTimeString('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Asia/Jakarta',
+        })
+        .replace('.', ':');
+
+      return res.status(200).json({
+        success: true,
+        message: `Clock In berhasil pada pukul ${timeStr}.`,
+        data: {
+          id: attendanceLog.id,
+          status: 'Clock In',
+          time: timeStr,
+          distance,
+          radius,
+          face_confidence: aiResult.confidence,
+          photo: photoRelativePath,
+          location: location.name,
+          timestamp: now.toISOString(),
+        },
+      });
+    } catch (error) {
+      // Cleanup file jika terjadi error tak terduga
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      next(error);
+    }
+  },
+
   /**
    * POST /api/attendance
-   * Proses absensi: upload foto, geofencing, face recognition, simpan log.
+   * Proses absensi legacy: upload foto, geofencing, face recognition, simpan log.
    *
    * Flow:
    *   1. Validasi JWT (sudah dilakukan oleh authMiddleware)
@@ -58,11 +343,12 @@ const attendanceController = {
 
       if (type === 'in' && todayStatus.hasClockedIn) {
         if (req.file) fs.unlinkSync(req.file.path);
-        const inTime = (todayStatus.clockIn.time || new Date(todayStatus.clockIn.created_at).toLocaleTimeString('id-ID', {
+        const inTime = (todayStatus.clockIn.time || (todayStatus.clockIn.time || new Date(todayStatus.clockIn.created_at).toLocaleTimeString('id-ID', {
           hour: '2-digit',
           minute: '2-digit',
           timeZone: 'Asia/Jakarta',
-        })).replace('.', ':');
+          timeZone: 'Asia/Jakarta',
+        })).replace('.', ':')).replace('.', ':');
         return res.status(400).json({
           success: false,
           message: `Anda sudah melakukan Clock In hari ini pada pukul ${inTime}.`,
@@ -95,11 +381,12 @@ const attendanceController = {
         }
         if (todayStatus.hasClockedOut) {
           if (req.file) fs.unlinkSync(req.file.path);
-          const outTime = (todayStatus.clockOut.time || new Date(todayStatus.clockOut.created_at).toLocaleTimeString('id-ID', {
+          const outTime = (todayStatus.clockOut.time || (todayStatus.clockOut.time || new Date(todayStatus.clockOut.created_at).toLocaleTimeString('id-ID', {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'Asia/Jakarta',
-          })).replace('.', ':');
+            timeZone: 'Asia/Jakarta',
+          })).replace('.', ':')).replace('.', ':');
           return res.status(400).json({
             success: false,
             message: `Anda sudah melakukan Clock Out hari ini pada pukul ${outTime}.`,
@@ -289,7 +576,7 @@ const attendanceController = {
       }
 
       // ──────────────────────────────────────────────
-      // 9. Simpan log absensi dengan status final
+      // 7. Simpan log absensi dengan status final
       // ──────────────────────────────────────────────
       const photoRelativePath = req.file ? `attendance/${req.file.filename}` : null;
 
