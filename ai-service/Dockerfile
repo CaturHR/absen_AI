@@ -6,10 +6,16 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install dependensi sistem dasar
+# Install build tools & runtime libraries untuk Python C-extensions (numpy, opencv, deepface)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    python3-dev \
     curl \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip, setuptools, dan wheel agar selalu menggunakan pre-built binary wheels
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Salin dependencies & install
 COPY requirements.txt .
