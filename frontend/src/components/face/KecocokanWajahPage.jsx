@@ -153,21 +153,6 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
     }
   };
 
-<<<<<<< main
-=======
-  const isApproved = (status) =>
-    status === 'Hadir' ||
-    status === 'match' ||
-    status === 'Clock In' ||
-    status === 'Clock Out';
-
-  const isRejected = (status) =>
-    status === 'Wajah Tidak Cocok' ||
-    status === 'mismatch' ||
-    status === 'Gagal Verifikasi Wajah' ||
-    status === 'Ditolak';
-
->>>>>>> main
   const getSelectStyle = (status) => {
     if (isApproved(status)) {
       return {
