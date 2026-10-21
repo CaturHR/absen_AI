@@ -153,8 +153,6 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
     }
   };
 
-<<<<<<< main
-=======
   const isApproved = (status) =>
     status === 'Hadir' ||
     status === 'match' ||
@@ -167,7 +165,6 @@ export default function KecocokanWajahPage({ onBack, onLogout }) {
     status === 'Gagal Verifikasi Wajah' ||
     status === 'Ditolak';
 
->>>>>>> main
   const getSelectStyle = (status) => {
     if (isApproved(status)) {
       return {
