@@ -6,6 +6,8 @@ const Attendance = require('../models/Attendance');
 const User = require('../models/User');
 const Location = require('../models/Location');
 const haversine = require('../utils/haversine');
+const { UPLOAD_DIR_FACES } = require('../config/multer');
+const { compareFaces } = require('../utils/faceRecognition');
 
 // URL Microservice AI Face Recognition (self-hosted)
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000';
