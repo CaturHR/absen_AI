@@ -26,18 +26,25 @@ const pool = mysql.createPool({
 });
 
 /**
- * Test koneksi database saat startup.
+ * Test koneksi database saat startup dengan retry otomatis.
  */
-const testConnection = async () => {
-  try {
-    const connection = await pool.getConnection();
-    const [rows] = await connection.query('SELECT 1 + 1 AS result');
-    connection.release();
-    console.log(`✅ Database MySQL terhubung ke "${process.env.DB_NAME || 'absensi_db'}" (Pool Limit: ${pool.pool.config.connectionLimit}).`);
-  } catch (error) {
-    console.error('❌ Gagal terhubung ke database MySQL:', error.message);
-    console.error('👉 Pastikan service MySQL/MariaDB aktif dan konfigurasi di .env sudah benar.');
-    process.exit(1);
+const testConnection = async (retries = 10, delayMs = 3000) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const connection = await pool.getConnection();
+      const [rows] = await connection.query('SELECT 1 + 1 AS result');
+      connection.release();
+      console.log(`✅ Database MySQL terhubung ke "${process.env.DB_NAME || 'absensi_db'}" (Pool Limit: ${pool.pool.config.connectionLimit}).`);
+      return;
+    } catch (error) {
+      console.warn(`⏳ Menunggu database siap (percobaan ${attempt}/${retries}): ${error.message}`);
+      if (attempt === retries) {
+        console.error('❌ Gagal terhubung ke database MySQL setelah beberapa percobaan:', error.message);
+        console.error('👉 Pastikan service MySQL/MariaDB aktif dan konfigurasi di .env sudah benar.');
+        process.exit(1);
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
 };
 
