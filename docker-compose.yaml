@@ -63,8 +63,9 @@ services:
     volumes:
       # Persistent storage untuk foto absen, wajah, dan berkas izin
       - uploads_storage:/app/uploads
-    expose:
-      - 5000
+    ports:
+      - "5000:5000"
+
     networks:
       - absen_network
 
