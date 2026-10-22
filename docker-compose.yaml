@@ -81,6 +81,7 @@ services:
       - 80
     networks:
       - absen_network
+      - coolify
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
@@ -102,3 +103,6 @@ volumes:
 networks:
   absen_network:
     driver: bridge
+  coolify:
+    name: coolify
+    external: true
