@@ -369,7 +369,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               controller: controller,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                hintText: 'http://192.168.1.xxx:5000',
+                hintText: 'http://163.52.135.187:5000',
                 isDense: true,
               ),
             ),
@@ -606,25 +606,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ],
                         ),
-                        const Divider(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Role', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF365C4A).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                (_userData['role'] ?? 'user').toUpperCase(),
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF365C4A), fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
+
                         const Divider(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
